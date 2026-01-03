@@ -12,7 +12,7 @@ from datetime import datetime
 from db import (
     init_db, add_player, list_players, add_game, list_games,
     get_leaderboard, get_game_scores, get_all_scores, get_games_with_winners,
-    delete_game
+    delete_game,
 )
 
 
