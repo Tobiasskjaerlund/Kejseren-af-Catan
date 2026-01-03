@@ -8,9 +8,11 @@ import altair as alt
 from datetime import datetime
 
 
+
 from db import (
     init_db, add_player, list_players, add_game, list_games,
-    get_leaderboard, get_game_scores, get_all_scores, get_games_with_winners
+    get_leaderboard, get_game_scores, get_all_scores, get_games_with_winners,
+    delete_game
 )
 
 
@@ -213,18 +215,54 @@ with tabs[2]:
             except Exception as e:
                 st.error(f"Could not save game: {e}")
 
-# --- Games History ---
-with tabs[3]:
-    st.subheader("Games History")
+
+# --- Games History / Spilhistorik ---
+with tabs[2]:  # adjust index if your order is different
+    st.subheader("Spilhistorik")
+
     games = list_games()
     df_games = pd.DataFrame(games, columns=["game_id", "played_at", "winner"])
     st.dataframe(df_games, use_container_width=True)
 
-    if games:
-        selected_gid = st.selectbox("Game", options=[g[0] for g in games])
+    if not games:
+        st.info("Ingen spil endnu.")
+    else:
+        st.write("Vælg et spil for detaljer eller sletning:")
+
+        selected_gid = st.selectbox(
+            "Vælg kamp-ID",
+            options=[g[0] for g in games],
+            format_func=lambda gid: f"#{gid}",
+            key="select_gid_history"
+        )
+
         if selected_gid:
-            rows = get_game_scores(selected_gid)
-            st.table(pd.DataFrame(rows, columns=["player", "points"]))
+            rows = get_game_scores(selected_gid) or []
+            st.table(pd.DataFrame(rows, columns=["Spiller", "Point"]))
+
+            st.divider()
+            st.warning(
+                "⚠️ Dette vil **permanent** slette det valgte spil og alle tilknyttede points.",
+                icon="⚠️"
+            )
+
+            c1, c2 = st.columns([1, 1])
+            with c1:
+                confirm = st.checkbox("Jeg er sikker", key=f"confirm_delete_{selected_gid}")
+            with c2:
+                if st.button("Slet spil", type="primary", disabled=not confirm):
+                    try:
+                        deleted_games, deleted_scores = delete_game(selected_gid)
+                        if deleted_games == 1:
+                            st.success(
+                                f"Slettede spil #{selected_gid} og {deleted_scores} score-rækker.",
+                                icon="✅"
+                            )
+                        else:
+                            st.info(f"Ingen kamp med ID #{selected_gid} blev fundet.", icon="ℹ️")
+                        st.rerun()  # refresh the table/list
+                    except Exception as e:
+                        st.error(f"Kunne ikke slette spil #{selected_gid}. Fejl: {e}")
 
 
 # --- Export ---

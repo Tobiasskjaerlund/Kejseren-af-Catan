@@ -39,6 +39,29 @@ CREATE TABLE IF NOT EXISTS scores (
 );
 """
 
+# db.py  — place this near your other functions
+from sqlalchemy import text
+
+def delete_game(game_id: int):
+    """
+    Deletes one game and all its related scores (via ON DELETE CASCADE).
+    Returns (deleted_game_rows, deleted_scores_count).
+    """
+    with engine.begin() as conn:
+        # Count scores for user feedback
+        scount = conn.execute(
+            text("SELECT COUNT(*) FROM scores WHERE game_id = :gid"),
+            {"gid": game_id}
+        ).scalar() or 0
+
+        # Delete the game (scores removed because of ON DELETE CASCADE)
+        dcount = conn.execute(
+            text("DELETE FROM games WHERE id = :gid"),
+            {"gid": game_id}
+        ).rowcount or 0
+
+    return dcount, scount
+
 def init_db():
     # Create tables and seed default players (Kristian, Johan)
     with engine.begin() as conn:
