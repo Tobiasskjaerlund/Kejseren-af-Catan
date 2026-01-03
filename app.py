@@ -217,7 +217,7 @@ with tabs[2]:
 
 
 # --- Games History / Spilhistorik ---
-with tabs[2]:  # adjust index if your order is different
+with tabs[3]:  # adjust index if your order is different
     st.subheader("Spilhistorik")
 
     games = list_games()
