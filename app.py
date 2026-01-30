@@ -66,22 +66,30 @@ with tabs[0]:
             )
             avg_df = avg_df.sort_values("avg_points_per_game", ascending=False)
 
-            import altair as alt
-            bar_avg = alt.Chart(avg_df).mark_bar().encode(
-                x=alt.X("avg_points_per_game:Q", title="Average points per game"),
-                y=alt.Y("player:N", sort="-x", title="Player"),
-                color=alt.Color("player:N", legend=None),
-                tooltip=[
-                    alt.Tooltip("player:N", title="Player"),
-                    alt.Tooltip("avg_points_per_game:Q", title="Avg points/game", format=".2f"),
-                    alt.Tooltip("games_played:Q", title="Games played"),
-                    alt.Tooltip("total_points:Q", title="Total points"),
-                ],
-            ).properties(
-                height=max(180, 22 * len(avg_df)),
-                title="Gennemsnitligt antal point pr. spil"
-            )
-            st.altair_chart(bar_avg, use_container_width=True)
+            
+import altair as alt
+
+bar_avg = (
+    alt.Chart(avg_df)
+    .mark_bar()
+    .encode(
+        x=alt.X("avg_points_per_game:Q", title="Average points per game"),
+        y=alt.Y("player:N", sort="-x", title="Player"),
+        color=alt.Color("player:N", legend=None),
+        tooltip=[
+            alt.Tooltip("player:N", title="Player"),
+            alt.Tooltip("avg_points_per_game:Q", title="Avg points/game", format=".2f"),
+            alt.Tooltip("games_played:Q", title="Games played"),
+            alt.Tooltip("total_points:Q", title="Total points"),
+        ],
+    )
+    # 👇 This makes the chart automatically tall enough
+    .properties(
+        height=alt.Step(28),  # try 26-32 for thinner/thicker bars
+        title="Gennemsnitligt antal point pr. spil",
+    )
+)
+st.altair_chart(bar_avg, use_container_width=True)
         else:
             st.info("No score data yet to compute average points per game.")
 
@@ -289,4 +297,5 @@ with tabs[4]:
     )
     st.write("Preview:")
     st.dataframe(export_df, use_container_width=True)
+
 
