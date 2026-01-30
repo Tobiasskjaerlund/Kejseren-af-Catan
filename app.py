@@ -1,4 +1,3 @@
-
 # app.py
 
 import streamlit as st
@@ -7,14 +6,11 @@ import sqlite3
 import altair as alt
 from datetime import datetime
 
-
-
 from db import (
     init_db, add_player, list_players, add_game, list_games,
     get_leaderboard, get_game_scores, get_all_scores, get_games_with_winners,
     delete_game,
 )
-
 
 st.set_page_config(page_title="Kejser af Catan", page_icon="🎯", layout="centered")
 
@@ -31,14 +27,12 @@ tabs = st.tabs(["Rangliste","Tilføj spiller", "Registrer spil", "Spilhistorik",
 with tabs[0]:
     st.subheader("Rangliste:")
 
-    # Core table (still useful, but you can remove if you only want visuals)
     lb = get_leaderboard()
     df_lb = pd.DataFrame(lb, columns=["player_id", "player", "total_points", "wins", "games_played"])
     st.dataframe(df_lb.drop(columns=["player_id"]), use_container_width=True)
 
     st.markdown("### Spil statistik:")
 
-    # Fetch data needed for visuals
     score_rows = get_all_scores() or []
     game_rows = get_games_with_winners() or []
 
@@ -48,7 +42,6 @@ with tabs[0]:
     if scores_df.empty and games_df.empty:
         st.info("No games yet — add a game in the **New Game** tab to see charts here.")
     else:
-        # Parse datetime for both frames where available
         if not scores_df.empty:
             scores_df["played_at"] = pd.to_datetime(scores_df["played_at"])
         if not games_df.empty:
@@ -56,48 +49,45 @@ with tabs[0]:
 
         # ---- 1) Average number of points per game (per player)
         if not scores_df.empty:
-            # Average points per game per player: total points / number of games they appeared in
             games_per_player = scores_df.groupby("player")["game_id"].nunique().rename("games_played").reset_index()
             total_points_per_player = scores_df.groupby("player")["points"].sum().rename("total_points").reset_index()
             avg_df = games_per_player.merge(total_points_per_player, on="player")
-            # Avoid division by zero
+
             avg_df["avg_points_per_game"] = avg_df.apply(
                 lambda r: (r["total_points"] / r["games_played"]) if r["games_played"] else 0, axis=1
             )
             avg_df = avg_df.sort_values("avg_points_per_game", ascending=False)
 
-            
-import altair as alt
+            # ⭐️ UPDATED BLOCK: auto-height using alt.Step()
+            bar_avg = (
+                alt.Chart(avg_df)
+                .mark_bar()
+                .encode(
+                    x=alt.X("avg_points_per_game:Q", title="Average points per game"),
+                    y=alt.Y("player:N", sort="-x", title="Player"),
+                    color=alt.Color("player:N", legend=None),
+                    tooltip=[
+                        alt.Tooltip("player:N", title="Player"),
+                        alt.Tooltip("avg_points_per_game:Q", title="Avg points/game", format=".2f"),
+                        alt.Tooltip("games_played:Q", title="Games played"),
+                        alt.Tooltip("total_points:Q", title="Total points"),
+                    ],
+                )
+                .properties(
+                    height=alt.Step(28),  # Auto-expands depending on number of players
+                    title="Gennemsnitligt antal point pr. spil"
+                )
+            )
 
-bar_avg = (
-    alt.Chart(avg_df)
-    .mark_bar()
-    .encode(
-        x=alt.X("avg_points_per_game:Q", title="Average points per game"),
-        y=alt.Y("player:N", sort="-x", title="Player"),
-        color=alt.Color("player:N", legend=None),
-        tooltip=[
-            alt.Tooltip("player:N", title="Player"),
-            alt.Tooltip("avg_points_per_game:Q", title="Avg points/game", format=".2f"),
-            alt.Tooltip("games_played:Q", title="Games played"),
-            alt.Tooltip("total_points:Q", title="Total points"),
-        ],
-    )
-    # 👇 This makes the chart automatically tall enough
-    .properties(
-        height=alt.Step(28),  # try 26-32 for thinner/thicker bars
-        title="Gennemsnitligt antal point pr. spil",
-    )
-)
-st.altair_chart(bar_avg, use_container_width=True)
+            st.altair_chart(bar_avg, use_container_width=True)
 
+        else:
+            st.info("No score data yet to compute average points per game.")
 
         # ---- 2) Cumulative wins over time (per player)
         if not games_df.empty:
-            # Drop games without a winner (just in case)
             wins_df = games_df.dropna(subset=["winner"]).copy()
             wins_df = wins_df.sort_values(["winner", "played_at", "game_id"])
-            # Each game counts as +1 win for its winner
             wins_df["win"] = 1
             wins_df["cum_wins"] = wins_df.groupby("winner")["win"].cumsum()
 
@@ -138,7 +128,6 @@ st.altair_chart(bar_avg, use_container_width=True)
 
         # ---- 4) Max games played in one day
         if not games_df.empty:
-            # Count games per calendar day
             games_df["date"] = games_df["played_at"].dt.date
             games_per_day = games_df.groupby("date").size().reset_index(name="games")
             max_row = games_per_day.loc[games_per_day["games"].idxmax()]
@@ -150,8 +139,7 @@ st.altair_chart(bar_avg, use_container_width=True)
                 st.metric(label="Maks antal spil på én dag", value=max_games)
             with c2:
                 st.metric(label="Date", value=str(max_date))
-            # Optional: show distribution bar chart
-            import altair as alt
+
             bar_games = alt.Chart(games_per_day).mark_bar().encode(
                 x=alt.X("date:T", title="Date"),
                 y=alt.Y("games:Q", title="Games"),
@@ -160,7 +148,6 @@ st.altair_chart(bar_avg, use_container_width=True)
             st.altair_chart(bar_games, use_container_width=True)
         else:
             st.info("No games recorded yet to compute max games per day.")
-
 
 
 # --- Add Players ---
@@ -184,6 +171,7 @@ with tabs[1]:
     players = list_players()
     st.write("Current players:")
     st.table(pd.DataFrame(players, columns=["id", "name"]))
+
 
 # --- New Game ---
 with tabs[2]:
@@ -224,7 +212,7 @@ with tabs[2]:
 
 
 # --- Games History / Spilhistorik ---
-with tabs[3]:  # adjust index if your order is different
+with tabs[3]:
     st.subheader("Spilhistorik")
 
     games = list_games()
@@ -267,7 +255,7 @@ with tabs[3]:  # adjust index if your order is different
                             )
                         else:
                             st.info(f"Ingen kamp med ID #{selected_gid} blev fundet.", icon="ℹ️")
-                        st.rerun()  # refresh the table/list
+                        st.rerun()
                     except Exception as e:
                         st.error(f"Kunne ikke slette spil #{selected_gid}. Fejl: {e}")
 
@@ -296,6 +284,3 @@ with tabs[4]:
     )
     st.write("Preview:")
     st.dataframe(export_df, use_container_width=True)
-
-
-
