@@ -90,8 +90,7 @@ bar_avg = (
     )
 )
 st.altair_chart(bar_avg, use_container_width=True)
-        else:
-            st.info("No score data yet to compute average points per game.")
+
 
         # ---- 2) Cumulative wins over time (per player)
         if not games_df.empty:
@@ -297,5 +296,6 @@ with tabs[4]:
     )
     st.write("Preview:")
     st.dataframe(export_df, use_container_width=True)
+
 
 
