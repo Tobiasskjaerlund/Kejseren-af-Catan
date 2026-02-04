@@ -177,7 +177,7 @@ with tabs[1]:
 with tabs[2]:
     st.subheader("Registrer spil")
 
-    players = list_players()
+    players = list()
     if not players:
         st.info("Tilføj spillere først.")
         st.stop()
@@ -263,3 +263,4 @@ with tabs[4]:
     )
 
     st.dataframe(export_df, use_container_width=True)
+
