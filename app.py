@@ -154,23 +154,24 @@ with tabs[0]:
         )
 
         st.altair_chart(line_wins, use_container_width=True)
+        
     # ---- 3) Pie chart: number of wins per player
-            if not games_df.empty:
-                wins_per_player = games_df.dropna(subset=["winner"]).groupby("winner").size().reset_index(name="wins")
-                if wins_per_player["wins"].sum() == 0:
-                    st.info("No wins recorded yet.")
-                else:
-                    pie = alt.Chart(wins_per_player).mark_arc(innerRadius=60).encode(
-                        theta=alt.Theta("wins:Q", title="Wins"),
-                        color=alt.Color("winner:N", title="Player"),
-                        tooltip=[alt.Tooltip("winner:N", title="Player"), alt.Tooltip("wins:Q", title="Wins")]
-                    ).properties(
-                        height=300,
-                        title="Sejre pr. spiller"
-                    )
-                    st.altair_chart(pie, use_container_width=True)
-            else:
-                st.info("No games recorded yet to show wins per player.")
+    if not games_df.empty:
+        wins_per_player = games_df.dropna(subset=["winner"]).groupby("winner").size().reset_index(name="wins")
+        if wins_per_player["wins"].sum() == 0:
+            st.info("No wins recorded yet.")
+        else:
+            pie = alt.Chart(wins_per_player).mark_arc(innerRadius=60).encode(
+                theta=alt.Theta("wins:Q", title="Wins"),
+                color=alt.Color("winner:N", title="Player"),
+                tooltip=[alt.Tooltip("winner:N", title="Player"), alt.Tooltip("wins:Q", title="Wins")]
+            ).properties(
+                height=300,
+                title="Sejre pr. spiller"
+            )
+            st.altair_chart(pie, use_container_width=True)
+    else:
+        st.info("No games recorded yet to show wins per player.")
 
     # ---- 4) Max games played in one day
     if not games_df.empty:
@@ -304,6 +305,7 @@ with tabs[4]:
     )
 
     st.dataframe(export_df, use_container_width=True)
+
 
 
 
