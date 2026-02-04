@@ -154,6 +154,47 @@ with tabs[0]:
         )
 
         st.altair_chart(line_wins, use_container_width=True)
+    # ---- 3) Pie chart: number of wins per player
+            if not games_df.empty:
+                wins_per_player = games_df.dropna(subset=["winner"]).groupby("winner").size().reset_index(name="wins")
+                if wins_per_player["wins"].sum() == 0:
+                    st.info("No wins recorded yet.")
+                else:
+                    pie = alt.Chart(wins_per_player).mark_arc(innerRadius=60).encode(
+                        theta=alt.Theta("wins:Q", title="Wins"),
+                        color=alt.Color("winner:N", title="Player"),
+                        tooltip=[alt.Tooltip("winner:N", title="Player"), alt.Tooltip("wins:Q", title="Wins")]
+                    ).properties(
+                        height=300,
+                        title="Sejre pr. spiller"
+                    )
+                    st.altair_chart(pie, use_container_width=True)
+            else:
+                st.info("No games recorded yet to show wins per player.")
+
+    # ---- 4) Max games played in one day
+    if not games_df.empty:
+        games_df["date"] = games_df["played_at"].dt.date
+        games_per_day = games_df.groupby("date").size().reset_index(name="games")
+        max_row = games_per_day.loc[games_per_day["games"].idxmax()]
+        max_date = max_row["date"]
+        max_games = int(max_row["games"])
+
+        c1, c2 = st.columns(2)
+        with c1:
+            st.metric(label="Maks antal spil på én dag", value=max_games)
+        with c2:
+            st.metric(label="Date", value=str(max_date))
+
+        bar_games = alt.Chart(games_per_day).mark_bar().encode(
+            x=alt.X("date:T", title="Date"),
+            y=alt.Y("games:Q", title="Games"),
+            tooltip=["date:T", "games:Q"]
+        ).properties(height=200, title="Spil tidslinje")
+        st.altair_chart(bar_games, use_container_width=True)
+    else:
+        st.info("No games recorded yet to compute max games per day.")
+
 
 # ==================================================
 # TAB 1 — ADD PLAYER
@@ -263,5 +304,6 @@ with tabs[4]:
     )
 
     st.dataframe(export_df, use_container_width=True)
+
 
 
