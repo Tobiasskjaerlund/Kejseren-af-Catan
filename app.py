@@ -177,7 +177,7 @@ with tabs[1]:
 with tabs[2]:
     st.subheader("Registrer spil")
 
-    players = list()
+    players = list_players()
     if not players:
         st.info("Tilføj spillere først.")
         st.stop()
@@ -185,7 +185,7 @@ with tabs[2]:
     names = [p[1] for p in players]
     ids = {p[1]: p[0] for p in players}
 
-    selected = st.multiselect("Spillere", names, default=names)
+    selected = st.multiselect("Spillere", names)
     points = {}
 
     cols = st.columns(len(selected) or 1)
@@ -263,4 +263,5 @@ with tabs[4]:
     )
 
     st.dataframe(export_df, use_container_width=True)
+
 
