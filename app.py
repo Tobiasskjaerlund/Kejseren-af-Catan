@@ -2,7 +2,6 @@
 
 import streamlit as st
 import pandas as pd
-import sqlite3
 import altair as alt
 from datetime import datetime
 
@@ -205,8 +204,6 @@ with tabs[2]:
                 game_id, winner_id = add_game(played_ts, points)
                 winner_name = next(n for (i2, n) in players if i2 == winner_id)
                 st.success(f"Saved game #{game_id}. Winner: {winner_name}")
-            except sqlite3.OperationalError as e:
-                st.error(f"Database not initialized. Please reload the app. Details: {e}")
             except Exception as e:
                 st.error(f"Could not save game: {e}")
 
@@ -284,3 +281,4 @@ with tabs[4]:
     )
     st.write("Preview:")
     st.dataframe(export_df, use_container_width=True)
+
