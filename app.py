@@ -1,284 +1,265 @@
-# app.py
-
 import streamlit as st
 import pandas as pd
 import altair as alt
 from datetime import datetime
 
 from db import (
-    init_db, add_player, list_players, add_game, list_games,
-    get_leaderboard, get_game_scores, get_all_scores, get_games_with_winners,
+    init_db,
+    add_player,
+    list_players,
+    add_game,
+    list_games,
+    get_leaderboard,
+    get_game_scores,
+    get_all_scores,
+    get_games_with_winners,
     delete_game,
 )
 
-st.set_page_config(page_title="Kejser af Catan", page_icon="🎯", layout="centered")
+# --------------------------------------------------
+# App config
+# --------------------------------------------------
+st.set_page_config(
+    page_title="Kejser af Catan",
+    page_icon="🎯",
+    layout="centered"
+)
 
-# ✅ Initialize DB exactly once per session
+# --------------------------------------------------
+# Initialize DB once per session
+# --------------------------------------------------
 if "db_initialized" not in st.session_state:
     init_db()
-    st.session_state["db_initialized"] = True
+    st.session_state.db_initialized = True
 
+# --------------------------------------------------
+# ✅ GLOBAL DATA (reloaded on every rerun)
+# --------------------------------------------------
+leaderboard_data = get_leaderboard()
+all_scores = get_all_scores() or []
+games_with_winners = get_games_with_winners() or []
+games_list = list_games() or []
+
+# Convert to DataFrames once
+df_lb = pd.DataFrame(
+    leaderboard_data,
+    columns=["player_id", "player", "total_points", "wins", "games_played"]
+)
+
+scores_df = pd.DataFrame(
+    all_scores,
+    columns=["game_id", "played_at", "player", "points"]
+)
+
+games_df = pd.DataFrame(
+    games_with_winners,
+    columns=["game_id", "played_at", "winner"]
+)
+
+if not scores_df.empty:
+    scores_df["played_at"] = pd.to_datetime(scores_df["played_at"])
+
+if not games_df.empty:
+    games_df["played_at"] = pd.to_datetime(games_df["played_at"])
+
+# --------------------------------------------------
+# UI
+# --------------------------------------------------
 st.title("👑 Kejseren af Catan")
-tabs = st.tabs(["Rangliste","Tilføj spiller", "Registrer spil", "Spilhistorik", "Eksportér"])
+tabs = st.tabs([
+    "Rangliste",
+    "Tilføj spiller",
+    "Registrer spil",
+    "Spilhistorik",
+    "Eksportér",
+])
 
-
-# --- Leaderboard (FIRST TAB) ---
+# ==================================================
+# TAB 0 — LEADERBOARD + STATS
+# ==================================================
 with tabs[0]:
-    st.subheader("Rangliste:")
+    st.subheader("Rangliste")
 
-    lb = get_leaderboard()
-    df_lb = pd.DataFrame(lb, columns=["player_id", "player", "total_points", "wins", "games_played"])
-    st.dataframe(df_lb.drop(columns=["player_id"]), use_container_width=True)
+    st.dataframe(
+        df_lb.drop(columns=["player_id"]),
+        use_container_width=True
+    )
 
-    st.markdown("### Spil statistik:")
-
-    score_rows = get_all_scores() or []
-    game_rows = get_games_with_winners() or []
-
-    scores_df = pd.DataFrame(score_rows, columns=["game_id", "played_at", "player", "points"])
-    games_df = pd.DataFrame(game_rows, columns=["game_id", "played_at", "winner"])
+    st.markdown("### Spil statistik")
 
     if scores_df.empty and games_df.empty:
-        st.info("No games yet — add a game in the **New Game** tab to see charts here.")
-    else:
-        if not scores_df.empty:
-            scores_df["played_at"] = pd.to_datetime(scores_df["played_at"])
-        if not games_df.empty:
-            games_df["played_at"] = pd.to_datetime(games_df["played_at"])
+        st.info("Ingen spil endnu.")
+        st.stop()
 
-        # ---- 1) Average number of points per game (per player)
-        if not scores_df.empty:
-            games_per_player = scores_df.groupby("player")["game_id"].nunique().rename("games_played").reset_index()
-            total_points_per_player = scores_df.groupby("player")["points"].sum().rename("total_points").reset_index()
-            avg_df = games_per_player.merge(total_points_per_player, on="player")
+    # ---- Avg points per game
+    if not scores_df.empty:
+        games_per_player = (
+            scores_df.groupby("player")["game_id"]
+            .nunique()
+            .rename("games_played")
+            .reset_index()
+        )
 
-            avg_df["avg_points_per_game"] = avg_df.apply(
-                lambda r: (r["total_points"] / r["games_played"]) if r["games_played"] else 0, axis=1
-            )
-            avg_df = avg_df.sort_values("avg_points_per_game", ascending=False)
+        total_points = (
+            scores_df.groupby("player")["points"]
+            .sum()
+            .rename("total_points")
+            .reset_index()
+        )
 
-            # ⭐️ UPDATED BLOCK: auto-height using alt.Step()
-            bar_avg = (
-                alt.Chart(avg_df)
-                .mark_bar()
-                .encode(
-                    x=alt.X("avg_points_per_game:Q", title="Average points per game"),
-                    y=alt.Y("player:N", sort="-x", title="Player"),
-                    color=alt.Color("player:N", legend=None),
-                    tooltip=[
-                        alt.Tooltip("player:N", title="Player"),
-                        alt.Tooltip("avg_points_per_game:Q", title="Avg points/game", format=".2f"),
-                        alt.Tooltip("games_played:Q", title="Games played"),
-                        alt.Tooltip("total_points:Q", title="Total points"),
-                    ],
-                )
-                .properties(
-                    height=alt.Step(28),  # Auto-expands depending on number of players
-                    title="Gennemsnitligt antal point pr. spil"
-                )
-            )
+        avg_df = games_per_player.merge(total_points, on="player")
+        avg_df["avg_points_per_game"] = (
+            avg_df["total_points"] / avg_df["games_played"]
+        )
 
-            st.altair_chart(bar_avg, use_container_width=True)
-
-        else:
-            st.info("No score data yet to compute average points per game.")
-
-        # ---- 2) Cumulative wins over time (per player)
-        if not games_df.empty:
-            wins_df = games_df.dropna(subset=["winner"]).copy()
-            wins_df = wins_df.sort_values(["winner", "played_at", "game_id"])
-            wins_df["win"] = 1
-            wins_df["cum_wins"] = wins_df.groupby("winner")["win"].cumsum()
-
-            line_wins = alt.Chart(wins_df).mark_line(point=True).encode(
-                x=alt.X("played_at:T", title="Date"),
-                y=alt.Y("cum_wins:Q", title="Cumulative wins"),
-                color=alt.Color("winner:N", title="Player"),
+        bar_avg = (
+            alt.Chart(avg_df)
+            .mark_bar()
+            .encode(
+                x=alt.X("avg_points_per_game:Q", title="Gns. point pr. spil"),
+                y=alt.Y("player:N", sort="-x", title="Spiller"),
+                color=alt.Color("player:N", legend=None),
                 tooltip=[
-                    alt.Tooltip("winner:N", title="Player"),
-                    alt.Tooltip("played_at:T", title="Date"),
-                    alt.Tooltip("cum_wins:Q", title="Cumulative wins")
+                    "player:N",
+                    alt.Tooltip("avg_points_per_game:Q", format=".2f"),
+                    "games_played:Q",
+                    "total_points:Q",
                 ],
-            ).properties(
-                height=300,
-                title="Antal sejre over tid:"
             )
-            st.altair_chart(line_wins, use_container_width=True)
-        else:
-            st.info("No games recorded yet to compute cumulative wins.")
+            .properties(
+                height=alt.Step(28),
+                title="Gennemsnitlige point pr. spil",
+            )
+        )
 
-        # ---- 3) Pie chart: number of wins per player
-        if not games_df.empty:
-            wins_per_player = games_df.dropna(subset=["winner"]).groupby("winner").size().reset_index(name="wins")
-            if wins_per_player["wins"].sum() == 0:
-                st.info("No wins recorded yet.")
-            else:
-                pie = alt.Chart(wins_per_player).mark_arc(innerRadius=60).encode(
-                    theta=alt.Theta("wins:Q", title="Wins"),
-                    color=alt.Color("winner:N", title="Player"),
-                    tooltip=[alt.Tooltip("winner:N", title="Player"), alt.Tooltip("wins:Q", title="Wins")]
-                ).properties(
-                    height=300,
-                    title="Sejre pr. spiller"
-                )
-                st.altair_chart(pie, use_container_width=True)
-        else:
-            st.info("No games recorded yet to show wins per player.")
+        st.altair_chart(bar_avg, use_container_width=True)
 
-        # ---- 4) Max games played in one day
-        if not games_df.empty:
-            games_df["date"] = games_df["played_at"].dt.date
-            games_per_day = games_df.groupby("date").size().reset_index(name="games")
-            max_row = games_per_day.loc[games_per_day["games"].idxmax()]
-            max_date = max_row["date"]
-            max_games = int(max_row["games"])
+    # ---- Cumulative wins
+    if not games_df.empty:
+        wins_df = games_df.dropna(subset=["winner"]).copy()
+        wins_df = wins_df.sort_values(["winner", "played_at", "game_id"])
+        wins_df["win"] = 1
+        wins_df["cum_wins"] = wins_df.groupby("winner")["win"].cumsum()
 
-            c1, c2 = st.columns(2)
-            with c1:
-                st.metric(label="Maks antal spil på én dag", value=max_games)
-            with c2:
-                st.metric(label="Date", value=str(max_date))
+        line_wins = (
+            alt.Chart(wins_df)
+            .mark_line(point=True)
+            .encode(
+                x=alt.X("played_at:T", title="Dato"),
+                y=alt.Y("cum_wins:Q", title="Samlede sejre"),
+                color=alt.Color("winner:N", title="Spiller"),
+                tooltip=["winner:N", "played_at:T", "cum_wins:Q"],
+            )
+            .properties(height=300, title="Sejre over tid")
+        )
 
-            bar_games = alt.Chart(games_per_day).mark_bar().encode(
-                x=alt.X("date:T", title="Date"),
-                y=alt.Y("games:Q", title="Games"),
-                tooltip=["date:T", "games:Q"]
-            ).properties(height=200, title="Spil tidslinje")
-            st.altair_chart(bar_games, use_container_width=True)
-        else:
-            st.info("No games recorded yet to compute max games per day.")
+        st.altair_chart(line_wins, use_container_width=True)
 
-
-# --- Add Players ---
+# ==================================================
+# TAB 1 — ADD PLAYER
+# ==================================================
 with tabs[1]:
-    st.subheader("Add Players")
+    st.subheader("Tilføj spiller")
 
-    new_player = st.text_input("Player name", key="new_player_name")
+    new_player = st.text_input("Navn")
 
-    if st.button("Add player", type="primary"):
-        if not st.session_state.get("db_initialized"):
-            init_db()
-            st.session_state["db_initialized"] = True
-        name = (new_player or "").strip()
-        if name:
-            try:
-                add_player(name)
-                st.success(f"Added player: {name}")
-            except Exception as e:
-                st.error(f"Could not add player (DB not initialized?). {e}")
+    if st.button("Tilføj", type="primary"):
+        if new_player.strip():
+            add_player(new_player.strip())
+            st.success(f"Spiller tilføjet: {new_player}")
+            st.rerun()
 
-    players = list_players()
-    st.write("Current players:")
-    st.table(pd.DataFrame(players, columns=["id", "name"]))
+    st.table(pd.DataFrame(list_players(), columns=["id", "name"]))
 
-
-# --- New Game ---
+# ==================================================
+# TAB 2 — ADD GAME
+# ==================================================
 with tabs[2]:
-    st.subheader("Record a New Game")
+    st.subheader("Registrer spil")
+
     players = list_players()
     if not players:
-        st.info("Add players first in the 'Add Players' tab.")
-    else:
-        names = [p[1] for p in players]
-        ids_by_name = {p[1]: p[0] for p in players}
+        st.info("Tilføj spillere først.")
+        st.stop()
 
-        selected_names = st.multiselect("Players in this game", names, default=names)
-        selected_ids = [ids_by_name[n] for n in selected_names]
+    names = [p[1] for p in players]
+    ids = {p[1]: p[0] for p in players}
 
-        st.write("Enter points for each player:")
-        points = {}
-        cols = st.columns(min(4, len(selected_ids)) or 1)
-        for i, pid in enumerate(selected_ids):
-            col = cols[i % len(cols)]
-            with col:
-                pname = next(n for (i2, n) in players if i2 == pid)
-                points[pid] = st.number_input(f"{pname}", min_value=0, step=1, value=0)
+    selected = st.multiselect("Spillere", names, default=names)
+    points = {}
 
-        played_at = st.date_input("Date", value=datetime.now().date())
-        time_str = st.time_input("Time", value=datetime.now().time())
+    cols = st.columns(len(selected) or 1)
+    for i, name in enumerate(selected):
+        with cols[i % len(cols)]:
+            points[ids[name]] = st.number_input(name, min_value=0, step=1)
 
-        if st.button("Save game", type="primary"):
-            from datetime import datetime as dt
-            played_ts = dt.combine(played_at, time_str).isoformat(timespec="seconds")
-            try:
-                game_id, winner_id = add_game(played_ts, points)
-                winner_name = next(n for (i2, n) in players if i2 == winner_id)
-                st.success(f"Saved game #{game_id}. Winner: {winner_name}")
-            except Exception as e:
-                st.error(f"Could not save game: {e}")
+    date = st.date_input("Dato", value=datetime.now().date())
+    time = st.time_input("Tid", value=datetime.now().time())
 
+    if st.button("Gem spil", type="primary"):
+        ts = datetime.combine(date, time).isoformat(timespec="seconds")
+        add_game(ts, points)
+        st.success("Spil gemt")
+        st.rerun()
 
-# --- Games History / Spilhistorik ---
+# ==================================================
+# TAB 3 — GAME HISTORY / DELETE
+# ==================================================
 with tabs[3]:
     st.subheader("Spilhistorik")
 
-    games = list_games()
-    df_games = pd.DataFrame(games, columns=["game_id", "played_at", "winner"])
+    df_games = pd.DataFrame(
+        games_list,
+        columns=["game_id", "played_at", "winner"]
+    )
+
     st.dataframe(df_games, use_container_width=True)
 
-    if not games:
-        st.info("Ingen spil endnu.")
-    else:
-        st.write("Vælg et spil for detaljer eller sletning:")
-
-        selected_gid = st.selectbox(
-            "Vælg kamp-ID",
-            options=[g[0] for g in games],
-            format_func=lambda gid: f"#{gid}",
-            key="select_gid_history"
+    if games_list:
+        gid = st.selectbox(
+            "Vælg spil",
+            options=[g[0] for g in games_list],
+            format_func=lambda x: f"#{x}",
         )
 
-        if selected_gid:
-            rows = get_game_scores(selected_gid) or []
-            st.table(pd.DataFrame(rows, columns=["Spiller", "Point"]))
-
-            st.divider()
-            st.warning(
-                "⚠️ Dette vil **permanent** slette det valgte spil og alle tilknyttede points.",
-                icon="⚠️"
+        st.table(
+            pd.DataFrame(
+                get_game_scores(gid),
+                columns=["Spiller", "Point"],
             )
+        )
 
-            c1, c2 = st.columns([1, 1])
-            with c1:
-                confirm = st.checkbox("Jeg er sikker", key=f"confirm_delete_{selected_gid}")
-            with c2:
-                if st.button("Slet spil", type="primary", disabled=not confirm):
-                    try:
-                        deleted_games, deleted_scores = delete_game(selected_gid)
-                        if deleted_games == 1:
-                            st.success(
-                                f"Slettede spil #{selected_gid} og {deleted_scores} score-rækker.",
-                                icon="✅"
-                            )
-                        else:
-                            st.info(f"Ingen kamp med ID #{selected_gid} blev fundet.", icon="ℹ️")
-                        st.rerun()
-                    except Exception as e:
-                        st.error(f"Kunne ikke slette spil #{selected_gid}. Fejl: {e}")
+        st.warning("Dette sletter spillet permanent.")
 
+        if st.checkbox("Jeg er sikker") and st.button("Slet spil", type="primary"):
+            delete_game(gid)
+            st.success("Spil slettet")
+            st.rerun()
 
-# --- Export ---
+# ==================================================
+# TAB 4 — EXPORT
+# ==================================================
 with tabs[4]:
-    st.subheader("Export")
-    games = list_games()
+    st.subheader("Eksport")
+
     export_rows = []
-    for gid, played_at, winner in games:
-        rows = get_game_scores(gid)
-        for player, points in rows:
+    for gid, played_at, winner in games_list:
+        for player, points in get_game_scores(gid):
             export_rows.append({
                 "game_id": gid,
                 "played_at": played_at,
                 "winner": winner,
                 "player": player,
-                "points": points
+                "points": points,
             })
-    export_df = pd.DataFrame(export_rows)
-    st.download_button(
-        label="Download CSV",
-        data=export_df.to_csv(index=False),
-        file_name="game_results_export.csv",
-        mime="text/csv"
-    )
-    st.write("Preview:")
-    st.dataframe(export_df, use_container_width=True)
 
+    export_df = pd.DataFrame(export_rows)
+
+    st.download_button(
+        "Download CSV",
+        data=export_df.to_csv(index=False),
+        file_name="catan_games.csv",
+        mime="text/csv",
+    )
+
+    st.dataframe(export_df, use_container_width=True)
